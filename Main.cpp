@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <cstring>
+#include <cassert>
 #include <vector>
+#include <string>
 
 using namespace std;
 
@@ -30,6 +32,15 @@ long long rshift(long long x, long long& delta) {
 	char buf[20]; sprintf(buf, "%lld", x); int len = strlen(buf);
 	long long ret = 0;
 	for (int i = 0; i < len; i ++) ret = ret * 10 + buf[(i - 1 + len) % len] - '0';
+	if (ret >= INF) return x * sign;
+	return ret * sign;
+}
+
+long long inv10(long long x, long long& delta) {
+	int sign = (x < 0) ? -1 : 1; x *= sign;
+	char buf[20]; sprintf(buf, "%lld", x); int len = strlen(buf);
+	long long ret = 0;
+	for (int i = 0; i < len; i ++) ret = ret * 10 + (10 - (buf[i] - '0')) % 10;
 	if (ret >= INF) return x * sign;
 	return ret * sign;
 }
@@ -67,6 +78,27 @@ long long chg(long long x, long long& delta) {
 	long long intto = B + delta;
 	char strfrom[10]; sprintf(strfrom, "%lld", intfrom); int lenfrom = strlen(strfrom);
 	char strto[10]; sprintf(strto, "%lld", intto); int lento = strlen(strto);
+	int sign = (x < 0) ? -1 : 1; x *= sign;
+	char buf[20]; sprintf(buf, "%lld", x); int len = strlen(buf);
+	for (int i = 0; i < len; i ++) {
+		int cmp = 0; for (int j = 0; j < lenfrom; j ++) cmp += strfrom[j] == buf[i + j];
+		if (cmp != lenfrom) continue;
+		for (int j = 0; j < lenfrom; j ++) buf[i + j] = -1;
+		buf[i] = -2;
+	}
+	long long ret = 0;
+	for (int i = 0; i < len; i ++) {
+		if (buf[i] == -2) for (int j = 0; j < lento; j ++) ret = ret * 10 + strto[j] - '0';
+		else if (buf[i] != -1) ret = ret * 10 + buf[i] - '0';
+	}
+	if (ret >= INF) return x * sign;
+	return ret * sign;
+}
+
+template <const char* A, const char* B>
+long long chgstr(long long x, long long& delta) {
+	char strfrom[10]; sprintf(strfrom, "%s", A); int lenfrom = strlen(strfrom);
+	char strto[10]; sprintf(strto, "%s", B); int lento = strlen(strto);
 	int sign = (x < 0) ? -1 : 1; x *= sign;
 	char buf[20]; sprintf(buf, "%lld", x); int len = strlen(buf);
 	for (int i = 0; i < len; i ++) {
@@ -124,18 +156,49 @@ template <long long U> long long deltaadd(long long x, long long& delta) {
 	return x;
 }
 
-int d[steplimit + 1];
-int sv[steplimit + 1];
-
 // Stage dependent
 // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-const long long S = 0;
-const long long T = 101;
-const long long steplimit = 7;
+const long long S = 3002;
+const long long T = 3507;
+const long long steplimit = 6;
 const int nfunc = 4;
-long long (*func[]) (long long, long long&) = {&mul<6>, &put<5>, &rshift, &chg<3,1>};
-const int nstore = 1;
+const int nstore = 0;
+// if you need chgstr<strfrom, strto>: 
+extern const char strfrom[] = "31";
+extern const char strto[] = "00";
+long long (*func[]) (long long, long long&) = {&put<7>, &chg<3,5>, &inv10, &rshift};
+// portal position from rightmost to leftmost, 0-based. if no portal, set the following values -1
+const int portal_from = 4;
+const int portal_to = 0;
 // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+long long portal(long long x) {
+	if (portal_from == -1) return x;
+	assert(portal_from > portal_to);
+	long long tmpx = x;
+	int sign = (x < 0) ? -1 : 1; x *= sign;
+	char buf[20]; int len = 0; while (x) { buf[len ++] = x % 10; x /= 10; }
+	int loop = 0;
+	while (len > portal_from) {
+		// if (++ loop >= 20) printf("%lld\n", tmpx);
+		buf[portal_to] += buf[portal_from];
+		for (int i = portal_from; i < len; i ++)
+			buf[i] = buf[i + 1];
+		len --;
+		for (int i = 0; i < len; i ++) if (buf[i] > 10) {
+			buf[i + 1] += buf[i] / 10;
+			buf[i] %= 10;
+		}
+		while (len > 0 && buf[len - 1] == 0) len --;
+	}
+	long long ret = 0;
+	for (int i = len - 1; i >= 0; i --) ret = ret * 10 + buf[i];
+	if (ret >= INF) return x * sign;
+	return ret * sign;
+}
+
+int d[steplimit + 1];
+int sv[steplimit + 1];
 
 void DFS(long long x, long long delta, vector <long long> store, long long curstep, long long steplimit) {
 	if (x == T) {
@@ -158,12 +221,14 @@ void DFS(long long x, long long delta, vector <long long> store, long long curst
 		for (d[curstep] = 0; d[curstep] < nfunc; d[curstep] ++) {
 			long long afterdelta = delta;
 			long long after = (*func[d[curstep]])(x, afterdelta);
+			after = portal(after);
 			if (after == x && afterdelta == delta) continue;
 			DFS(after, afterdelta, afterstore, curstep + 1, steplimit);
 		}
 		for (d[curstep] = nfunc; d[curstep] < nfunc + nstore; d[curstep] ++)
 			if (afterstore[d[curstep] - nfunc] != INF) {
 				long long after = putm(x, afterstore[d[curstep] - nfunc], delta);
+				after = portal(after);
 				if (after == x) continue;
 				DFS(after, delta, afterstore, curstep + 1, steplimit);
 			}
